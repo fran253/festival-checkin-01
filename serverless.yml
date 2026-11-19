@@ -15,6 +15,9 @@ provider:
       Ref: FestivalCheckInInscripciones
     FCI_TABLA_USUARIOS:
       Ref: FestivalCheckInUsuarios
+    #Nuevas tablas
+    TABLA_EMPRESAS: { Ref: TablaEmpresas }
+    TABLA_PROYECTOS: { Ref: TablaProyectos }
   httpApi:
     payload: '2.0'
     cors:
@@ -76,6 +79,32 @@ functions:
       - httpApi:
           method: POST
           path: /events/{eventId}/registrations/{userId}
+    
+ # FUNCIONES NUEVAS
+  crearProyecto:
+    handler: src/proyectos/crear-listar/handler.crearHandler
+    events:
+      - httpApi: { method: POST, path: /proyectos }
+  listarProyectos:
+    handler: src/proyectos/crear-listar/handler.listarHandler
+    events:
+      - httpApi: { method: GET, path: /proyectos }
+  eliminarProyecto:
+    handler: src/proyectos/eliminar/handler.handler
+    events:
+      - httpApi: { method: DELETE, path: /proyectos/{proyectoId} }
+  modificarHorasEstimadas:
+    handler: src/proyectos/modificar-horas-estimadas/handler.handler
+    events:
+      - httpApi: { method: PATCH, path: /proyectos/{proyectoId} }
+  trasladarProyecto:
+    handler: src/proyectos/trasladar/handler.handler
+    events:
+      - httpApi: { method: PATCH, path: /proyectos/{proyectoId}/empresa }
+  consultarEmpresa:
+    handler: src/empresas/consultar/handler.handler
+    events:
+      - httpApi: { method: GET, path: /empresas/{empresaId}/proyectos }
 
 resources:
   Resources:
@@ -125,6 +154,56 @@ resources:
         KeySchema:
           - AttributeName: USER_ID
             KeyType: HASH
+    #TABLAS NUEVAS
+    TablaEmpresas:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: EMPRESAS
+        # PARTITION KEY: EMPRESA_ID (N: número).
+        # CAMPOS NO CLAVE de esta tabla (fuera de su PK):
+        #   NOMBRE (S: texto).
+        # Sus tipos se describen en MODELO_EMPRESA.
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - { AttributeName: EMPRESA_ID, AttributeType: N }
+        KeySchema:
+          - AttributeName: EMPRESA_ID
+            KeyType: HASH  # Partition key del lado 1.
+
+      TablaProyectos:
+        Type: AWS::DynamoDB::Table
+        Properties:
+          TableName: PROYECTOS
+          # PARTITION KEY: PROYECTO_ID (N: número).
+          # CAMPOS NO CLAVE de esta tabla (fuera de su PK):
+          #   NOMBRE (S: texto).
+          #   HORAS_ESTIMADAS (N: número).
+          #   EMPRESA_ID (N: referencia y clave del GSI).
+          # Sus tipos se describen en MODELO_PROYECTO.
+          BillingMode: PAY_PER_REQUEST
+          AttributeDefinitions:  # N = número. Declara las claves.
+            - { AttributeName: PROYECTO_ID, AttributeType: N }
+            - { AttributeName: EMPRESA_ID, AttributeType: N }
+          KeySchema:
+            - AttributeName: PROYECTO_ID
+              KeyType: HASH  # Partition key del lado N.
+               # GSI: segunda forma de buscar en PROYECTOS.
+               # Global: agrupa todo el lado N por su referencia.
+          GlobalSecondaryIndexes:
+            - IndexName: PorEmpresa
+              # Clave compuesta = partition key + sort key:
+              # (EMPRESA_ID, PROYECTO_ID), los dos valores juntos.
+              KeySchema:
+                - AttributeName: EMPRESA_ID
+                  KeyType: HASH   # Partition key. Agrupa por Empresa.
+                - AttributeName: PROYECTO_ID
+                  KeyType: RANGE  # Sort key. Ordena por ID.
+                  Projection:
+                  ProjectionType: INCLUDE  # Claves + campos de abajo.
+                  NonKeyAttributes:        # Campos de PROYECTOS copiados al índice.
+                    - NOMBRE
+                    - HORAS_ESTIMADAS
+
   Outputs:
     NombreTablaEventosFCI:
       Value:
